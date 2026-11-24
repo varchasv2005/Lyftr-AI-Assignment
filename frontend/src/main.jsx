@@ -1,0 +1,83 @@
+import React, { useEffect, useRef, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { ArrowDown, ArrowUp, Check, ChevronDown, CircleHelp, Command, Copy, Menu, Plus, Sparkles, X } from 'lucide-react'
+import './style.css'
+
+const API = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
+const suggestions = [
+  { icon: '✳', title: 'Plan a weekend getaway', prompt: 'Help me plan a relaxing weekend getaway.' },
+  { icon: '⌘', title: 'Explain something simply', prompt: 'Explain a complex topic in simple terms.' },
+  { icon: '✎', title: 'Write with me', prompt: 'Help me write a thoughtful, polished message.' },
+  { icon: '◌', title: 'Help me brainstorm', prompt: 'Let’s brainstorm a few fresh ideas together.' },
+]
+
+function makeSession() { return `s-${crypto.randomUUID().slice(0, 8)}` }
+
+function App() {
+  const [sessionId, setSessionId] = useState(makeSession)
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [health, setHealth] = useState('checking')
+  const [copied, setCopied] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const endRef = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    fetch(`${API}/health`).then(r => r.ok ? r.json() : Promise.reject()).then(() => setHealth('online')).catch(() => setHealth('offline'))
+  }, [])
+  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [messages, busy])
+
+  function newChat() {
+    setSessionId(makeSession()); setMessages([]); setInput(''); setMenuOpen(false); inputRef.current?.focus()
+  }
+
+  async function sendMessage(text = input) {
+    const message = text.trim()
+    if (!message || busy) return
+    setInput(''); setBusy(true)
+    setMessages(old => [...old, { role: 'user', content: message, id: crypto.randomUUID() }])
+    try {
+      const response = await fetch(`${API}/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message, ...(systemPrompt.trim() ? { system_prompt: systemPrompt.trim() } : {}) }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`)
+      setMessages(old => [...old, { role: 'assistant', content: data.reply, metadata: data.metadata, id: crypto.randomUUID() }])
+    } catch (error) {
+      setMessages(old => [...old, { role: 'error', content: error.message || 'SARA could not connect right now. Please try again.', id: crypto.randomUUID() }])
+    } finally { setBusy(false); inputRef.current?.focus() }
+  }
+
+  async function copyConversation() {
+    await navigator.clipboard.writeText(messages.map(m => `${m.role === 'assistant' ? 'SARA' : m.role === 'user' ? 'You' : 'Notice'}: ${m.content}`).join('\n\n'))
+    setCopied(true); setTimeout(() => setCopied(false), 1600)
+  }
+
+  return <div className="app-shell">
+    <aside className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
+      <div className="brand-row"><div className="brand-mark"><Sparkles size={17} strokeWidth={1.7} /></div><span className="brand-name">sara</span><button className="icon-button mobile-menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={17}/></button></div>
+      <button className="new-chat" onClick={newChat}><Plus size={16}/><span>New chat</span><kbd><Command size={11}/> K</kbd></button>
+      <div className="side-label">YOUR ASSISTANT</div>
+      <div className="assistant-card"><div className="assistant-avatar"><Sparkles size={15}/></div><div><div className="assistant-title">SARA</div><div className="assistant-subtitle">Smart Adaptive Response Assistant</div></div><span className={`status-dot ${health}`} /></div>
+      <div className="side-spacer" />
+      <div className="sidebar-bottom"><div className="online-indicator"><span className={`pulse ${health}`} />{health === 'online' ? 'All systems operational' : health === 'checking' ? 'Checking connection…' : 'Backend unavailable'}</div><div className="profile-row"><div className="profile-avatar">S</div><div className="profile-copy"><strong>SARA workspace</strong><span>Personal</span></div><ChevronDown size={15} className="profile-chevron" /></div></div>
+    </aside>
+    {menuOpen && <button aria-label="Close navigation" className="mobile-scrim" onClick={() => setMenuOpen(false)} />}
+    <main className="main-panel">
+      <header className="topbar"><button className="icon-button mobile-menu-open" aria-label="Open menu" onClick={() => setMenuOpen(true)}><Menu size={19}/></button><div className="crumb"><span>Workspace</span><span className="crumb-sep">/</span><strong>New conversation</strong><ChevronDown size={14} /></div><div className="top-actions"><button className="top-action" onClick={() => setPromptOpen(v => !v)}><span className="prompt-glyph">✳</span><span>System prompt</span><span className={`toggle ${promptOpen ? 'toggle-on' : ''}`}><i/></span></button><button className="icon-button help-button" aria-label="Help" title="SARA is powered by a resilient, multi-key AI backend"><CircleHelp size={17}/></button></div></header>
+      <section className={`conversation ${messages.length ? 'conversation-active' : ''}`}>
+        {messages.length === 0 ? <div className="welcome-wrap"><div className="welcome-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-center"><Sparkles size={23} strokeWidth={1.5}/></div><i className="orb-star star-one">✳</i><i className="orb-star star-two">✦</i><i className="orb-star star-three">·</i></div><div className="eyebrow"><span/> YOUR THOUGHTFUL AI COMPANION</div><h1>Good to see you.<br/><span>What’s on your mind?</span></h1><p className="welcome-copy">I’m SARA, your Smart Adaptive Response Assistant.<br className="desktop-break"/> Bring me a question, a challenge, or a spark of an idea.</p><div className="suggestions">{suggestions.map((s, i) => <button key={s.title} className="suggestion" style={{'--i': i}} onClick={() => sendMessage(s.prompt)}><span className="suggestion-icon">{s.icon}</span><span>{s.title}</span><ArrowUp size={14} className="suggestion-arrow"/></button>)}</div></div> : <div className="message-list">{messages.map(m => m.role === 'user' ? <div className="user-message" key={m.id}><div>{m.content}</div></div> : m.role === 'error' ? <div className="error-message" key={m.id}><div className="error-icon">!</div><div><strong>Something went wrong</strong><p>{m.content}</p><button onClick={() => { setInput(messages.filter(x => x.role === 'user').at(-1)?.content || ''); inputRef.current?.focus() }}>Try again</button></div></div> : <article className="assistant-message" data-testid="assistant-message" key={m.id}><div className="reply-avatar"><Sparkles size={15}/></div><div className="reply-body"><div className="reply-heading"><strong>SARA</strong><span className="reply-timestamp">just now</span></div><div className="reply-text">{m.content}</div><div className="metadata-row"><span className={`source-chip ${m.metadata?.resolution_source === 'LLM_CACHE' ? 'cached' : ''}`}><i/>{m.metadata?.resolution_source}<span className="meta-tooltip">Resolution source</span></span><span className="meta-chip" data-testid="meta-model"><span className="meta-key">model</span>{m.metadata?.model}</span><span className="meta-chip" data-testid="meta-latency"><span className="meta-key">time</span>{m.metadata?.latency_ms} ms</span><span className="meta-chip" data-testid="meta-input-tokens"><span className="meta-key">in</span>{m.metadata?.input_tokens}</span><span className="meta-chip" data-testid="meta-output-tokens"><span className="meta-key">out</span>{m.metadata?.output_tokens}</span></div></div></article>)}{busy && <div className="thinking-row"><div className="reply-avatar thinking-avatar"><Sparkles size={15}/></div><span>SARA is thinking</span><span className="thinking-dots"><i/><i/><i/></span></div>}<div ref={endRef}/></div>}
+      </section>
+      <div className="composer-area"><div className="composer-wrap"><form className="composer" onSubmit={e => { e.preventDefault(); sendMessage() }}><textarea ref={inputRef} data-testid="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }} placeholder="Message SARA…" rows={1} disabled={busy} aria-label="Message SARA"/><div className="composer-footer"><div className="composer-hint"><span className="sparkle-small">✳</span> Thoughtful answers, built around you</div><button data-testid="send-button" className={`send-button ${input.trim() && !busy ? 'send-ready' : ''}`} type="submit" disabled={!input.trim() || busy} aria-label="Send message"><ArrowUp size={17}/></button></div></form><div className="composer-note">SARA can make mistakes. Check important information.</div></div></div>
+      {promptOpen && <div className="prompt-popover"><div className="prompt-popover-head"><div><strong>Session instructions</strong><span>Shape how SARA responds in this chat</span></div><button className="icon-button" aria-label="Close system prompt" onClick={() => setPromptOpen(false)}><X size={16}/></button></div><textarea data-testid="system-prompt-input" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="e.g. Keep answers concise and use a warm tone…"/><div className="prompt-foot"><span>Only applies to this conversation</span><button onClick={() => setPromptOpen(false)}>Done <Check size={13}/></button></div></div>}
+      <button className="copy-chat" onClick={copyConversation} aria-label="Copy conversation" title="Copy conversation"><Copy size={14}/>{copied ? 'Copied' : 'Copy chat'}</button>
+    </main>
+  </div>
+}
+
+createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>)
