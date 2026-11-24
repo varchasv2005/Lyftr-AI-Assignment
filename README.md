@@ -4,9 +4,11 @@ A resilient, full-stack AI chatbot built for the Lyftr AI Full-Stack Assignment.
 
 ## Live URLs
 
-- Frontend: _Deploy the `frontend` directory and add the public backend URL as `VITE_API_BASE_URL` at build time._
+- Frontend: https://varchasv2005.github.io/Lyftr-AI-Assignment/ (GitHub Pages; deployment starts after the Pages workflow is enabled.)
 - Backend: _Deploy the `backend` directory with a persistent volume mounted at `/data`._
 - GitHub: https://github.com/varchasv2005/Lyftr-AI-Assignment
+
+To connect the hosted frontend, add an Actions repository variable named `VITE_API_BASE_URL` containing the deployed backend's public base URL. GitHub Pages serves the static frontend; it does not run the FastAPI backend.
 
 ## Run locally: with Docker and without
 
