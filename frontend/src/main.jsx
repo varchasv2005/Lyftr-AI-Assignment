@@ -32,9 +32,11 @@ function displayText(value) {
 }
 
 class AppErrorBoundary extends React.Component {
-  state = { failed: false }
+  state = { failed: false, message: '' }
 
-  static getDerivedStateFromError() { return { failed: true } }
+  static getDerivedStateFromError(error) {
+    return { failed: true, message: error instanceof Error ? error.message : 'Unknown display error' }
+  }
 
   render() {
     if (this.state.failed) {
@@ -43,6 +45,7 @@ class AppErrorBoundary extends React.Component {
           <div className="brand-mark"><Sparkles size={17} strokeWidth={1.7} /></div>
           <h1>SARA hit a display error</h1>
           <p>Your conversation is still in this browser session. Reload SARA to continue.</p>
+          {this.state.message && <code className="fatal-error-detail">{this.state.message}</code>}
           <button onClick={() => window.location.reload()}>Reload SARA</button>
         </div>
       </main>
@@ -88,10 +91,18 @@ function App() {
       if (!response.ok) throw new Error(displayText(data.detail) || `Request failed (${response.status})`)
       const reply = displayText(data.reply)
       if (!reply) throw new Error('The provider returned an empty reply. Check the provider model configuration.')
-      setMessages(old => [...old, { role: 'assistant', content: reply, metadata: data.metadata, id: makeId() }])
+      const rawMetadata = data.metadata && typeof data.metadata === 'object' ? data.metadata : {}
+      const metadata = {
+        resolution_source: displayText(rawMetadata.resolution_source),
+        model: displayText(rawMetadata.model),
+        latency_ms: displayText(rawMetadata.latency_ms),
+        input_tokens: displayText(rawMetadata.input_tokens),
+        output_tokens: displayText(rawMetadata.output_tokens),
+      }
+      setMessages(old => [...old, { role: 'assistant', content: reply, metadata, id: makeId() }])
     } catch (error) {
       const reason = error instanceof Error ? error.message : displayText(error)
-      setMessages(old => [...old, { role: 'error', content: reason || 'SARA could not connect right now. Please try again.', id: makeId() }])
+      setMessages(old => [...old, { role: 'error', content: displayText(reason) || 'SARA could not connect right now. Please try again.', id: makeId() }])
     } finally { setBusy(false); inputRef.current?.focus() }
   }
 
