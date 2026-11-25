@@ -23,7 +23,7 @@ DB_PATH = DATABASE_URL.removeprefix("sqlite:////")
 if not DB_PATH.startswith("/"):
     DB_PATH = "/" + DB_PATH
 KEYS = [key.strip() for key in os.getenv("LLM_API_KEYS", "").split(",") if key.strip()]
-MODEL = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash")
+MODEL = os.getenv("LLM_MODEL", "gemini/gemini-3.8-flash")
 DEFAULT_SYSTEM_PROMPT = os.getenv(
     "DEFAULT_SYSTEM_PROMPT",
     "You are SARA (Smart Adaptive Response Assistant), a helpful, clear, and thoughtful AI assistant.",
