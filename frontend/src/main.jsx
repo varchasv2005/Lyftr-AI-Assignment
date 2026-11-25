@@ -32,10 +32,14 @@ function displayText(value) {
 }
 
 class AppErrorBoundary extends React.Component {
-  state = { failed: false, message: '' }
+  state = { failed: false, message: '', stack: '' }
 
   static getDerivedStateFromError(error) {
-    return { failed: true, message: error instanceof Error ? error.message : 'Unknown display error' }
+    return {
+      failed: true,
+      message: error instanceof Error ? error.message : 'Unknown display error',
+      stack: error instanceof Error && typeof error.stack === 'string' ? error.stack : '',
+    }
   }
 
   render() {
@@ -46,6 +50,7 @@ class AppErrorBoundary extends React.Component {
           <h1>SARA hit a display error</h1>
           <p>Your conversation is still in this browser session. Reload SARA to continue.</p>
           {this.state.message && <code className="fatal-error-detail">{this.state.message}</code>}
+          {this.state.stack && <details className="fatal-error-stack"><summary>Diagnostic details</summary><pre>{this.state.stack}</pre></details>}
           <button onClick={() => window.location.reload()}>Reload SARA</button>
         </div>
       </main>
@@ -70,7 +75,12 @@ function App() {
   useEffect(() => {
     fetch(`${API}/health`).then(r => r.ok ? r.json() : Promise.reject()).then(() => setHealth('online')).catch(() => setHealth('offline'))
   }, [])
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [messages, busy])
+  useEffect(() => {
+    const target = endRef.current
+    if (typeof target?.scrollIntoView === 'function') {
+      target.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [messages, busy])
 
   function newChat() {
     setSessionId(makeSession()); setMessages([]); setInput(''); setMenuOpen(false); inputRef.current?.focus()
