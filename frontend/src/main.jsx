@@ -11,7 +11,45 @@ const suggestions = [
   { icon: '◌', title: 'Help me brainstorm', prompt: 'Let’s brainstorm a few fresh ideas together.' },
 ]
 
-function makeSession() { return `s-${crypto.randomUUID().slice(0, 8)}` }
+function makeId() {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  } catch { /* Use the fallback in restricted browser contexts. */ }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function makeSession() { return `s-${makeId().slice(0, 8)}` }
+
+function displayText(value) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return value.map(displayText).filter(Boolean).join('\n')
+  if (value && typeof value === 'object') {
+    if (typeof value.text === 'string') return value.text
+    try { return JSON.stringify(value) } catch { return '[Unrenderable response]' }
+  }
+  return ''
+}
+
+class AppErrorBoundary extends React.Component {
+  state = { failed: false }
+
+  static getDerivedStateFromError() { return { failed: true } }
+
+  render() {
+    if (this.state.failed) {
+      return <main className="fatal-error" role="alert">
+        <div className="fatal-error-card">
+          <div className="brand-mark"><Sparkles size={17} strokeWidth={1.7} /></div>
+          <h1>SARA hit a display error</h1>
+          <p>Your conversation is still in this browser session. Reload SARA to continue.</p>
+          <button onClick={() => window.location.reload()}>Reload SARA</button>
+        </div>
+      </main>
+    }
+    return this.props.children
+  }
+}
 
 function App() {
   const [sessionId, setSessionId] = useState(makeSession)
@@ -39,17 +77,21 @@ function App() {
     const message = text.trim()
     if (!message || busy) return
     setInput(''); setBusy(true)
-    setMessages(old => [...old, { role: 'user', content: message, id: crypto.randomUUID() }])
+    const userMessage = { role: 'user', content: message, id: makeId() }
+    setMessages(old => [...old, userMessage])
     try {
       const response = await fetch(`${API}/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message, ...(systemPrompt.trim() ? { system_prompt: systemPrompt.trim() } : {}) }),
       })
       const data = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`)
-      setMessages(old => [...old, { role: 'assistant', content: data.reply, metadata: data.metadata, id: crypto.randomUUID() }])
+      if (!response.ok) throw new Error(displayText(data.detail) || `Request failed (${response.status})`)
+      const reply = displayText(data.reply)
+      if (!reply) throw new Error('The provider returned an empty reply. Check the provider model configuration.')
+      setMessages(old => [...old, { role: 'assistant', content: reply, metadata: data.metadata, id: makeId() }])
     } catch (error) {
-      setMessages(old => [...old, { role: 'error', content: error.message || 'SARA could not connect right now. Please try again.', id: crypto.randomUUID() }])
+      const reason = error instanceof Error ? error.message : displayText(error)
+      setMessages(old => [...old, { role: 'error', content: reason || 'SARA could not connect right now. Please try again.', id: makeId() }])
     } finally { setBusy(false); inputRef.current?.focus() }
   }
 
@@ -80,4 +122,4 @@ function App() {
   </div>
 }
 
-createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>)
+createRoot(document.getElementById('root')).render(<React.StrictMode><AppErrorBoundary><App/></AppErrorBoundary></React.StrictMode>)
